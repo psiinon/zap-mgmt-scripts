@@ -8,13 +8,14 @@ import os
 import utils
 
 urls = {
-    "stable": "https://registry.hub.docker.com/v2/repositories/owasp/zap2docker-stable/",
-    "weekly": "https://registry.hub.docker.com/v2/repositories/owasp/zap2docker-weekly/",
-    "bare": "https://registry.hub.docker.com/v2/repositories/owasp/zap2docker-bare/",
     "ssp-stable": "https://registry.hub.docker.com/v2/repositories/softwaresecurityproject/zap-stable/",
     "ssp-weekly": "https://registry.hub.docker.com/v2/repositories/softwaresecurityproject/zap-weekly/",
     "ssp-nightly": "https://registry.hub.docker.com/v2/repositories/softwaresecurityproject/zap-nightly/",
     "ssp-bare": "https://registry.hub.docker.com/v2/repositories/softwaresecurityproject/zap-bare/",
+    "zaproxy-stable": "https://registry.hub.docker.com/v2/repositories/zaproxy/zap-stable/",
+    "zaproxy-weekly": "https://registry.hub.docker.com/v2/repositories/zaproxy/zap-weekly/",
+    "zaproxy-nightly": "https://registry.hub.docker.com/v2/repositories/zaproxy/zap-nightly/",
+    "zaproxy-bare": "https://registry.hub.docker.com/v2/repositories/zaproxy/zap-bare/",
     }
 
 def collect():
@@ -85,6 +86,7 @@ def website():
                     date = row[0]
                     image = row[1]
                     if image.startswith("zap2docker-"):
+                        # Still needed for old stats
                         image = image[11:]
                     increase = row[3]
                     if not image in images:
