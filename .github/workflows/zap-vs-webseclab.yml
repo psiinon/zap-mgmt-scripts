@@ -45,10 +45,10 @@ jobs:
         git update-index -q --refresh
         ## If there are changes: comment, commit, PR
         if ! git diff-index --quiet HEAD --; then
+          echo ${{ secrets.ZAPBOT_TOKEN }} | gh auth login --with-token
           gh repo set-default zaproxy/zaproxy-website
           git add site/data/scans/webseclab/*
           git commit -sm "Updated Webseclab Results"
           git push -u origin $BRANCH -f
-          echo ${{ secrets.ZAPBOT_TOKEN }} | gh auth login --with-token
           gh pr create --fill || true
         fi
