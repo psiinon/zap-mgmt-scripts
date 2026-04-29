@@ -50,12 +50,20 @@ function listChildren(node, level) {
    for (j=0;j<node.getChildCount();j++) {
        var child = node.getChildAt(j);
        if (child.getChildCount() == 0 && level > MIN_LEVEL) {
-           var path = child.getHierarchicNodeName().substring(target.length);
+           var path = child.getHierarchicNodeName();
+           if (!path.startsWith(target)) {
+               continue;
+           }
+           path = path.substring(target.length);
            if (! IGNORE_PATHS.includes(path)) {
              totalUrls++;
              pw.println('- path: ' + path);
              var pluginId = nodeHasAlert(child, RULES);
-             if (pluginId) {
+             if (BROKEN_PATHS.includes(path)) {
+               totalUrls--;
+               pw.println('  result: Broken');
+               pw.println('  rule: ' + pluginId);
+             } else if (pluginId) {
                  totalAlerts++;
                  pw.println('  result: Pass');
                  pw.println('  rule: ' + pluginId);

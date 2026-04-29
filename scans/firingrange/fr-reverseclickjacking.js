@@ -4,3 +4,4 @@ var TARGET = "reverseclickjacking";
 var RULES = [10020];
 var MIN_LEVEL = 1;
 var IGNORE_PATHS = ['/', '/jsonpendpoint'];
+var BROKEN_PATHS = [];
