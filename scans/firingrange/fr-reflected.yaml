@@ -29,6 +29,17 @@ jobs:
     action: add
     type: standalone
     file: /zap/wrk/firing-range-score.js
+- parameters: {}
+  name: "spider"
+  type: "spider"
+  tests:
+  - onFail: "INFO"
+    statistic: "automation.spider.urls.added"
+    site: ""
+    operator: ">="
+    value: 100
+    name: "At least 100 URLs found"
+    type: "stats"
 - type: spiderClient
   name: "spiderClient"
   parameters: {}
