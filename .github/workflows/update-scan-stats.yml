@@ -52,12 +52,13 @@ jobs:
       run: |
         DAYS=${{ inputs.days || '7' }}
         COMPARE=${{ inputs.compare_days || '7' }}
-        for scan in firingrange wavsep; do
+        for scan in firingrange wavsep crawlground ssti; do
           python3 zap-mgmt-scripts/scans/generate-scan-stats.py \
             --data-dir scan-data/$scan \
             --output-dir zaproxy-website/site/data/scans/$scan \
             --days $DAYS \
-            --compare-days $COMPARE
+            --compare-days $COMPARE \
+            --scan $scan
         done
 
     - name: Raise a PR on the website
