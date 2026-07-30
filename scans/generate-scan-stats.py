@@ -22,6 +22,14 @@ from datetime import date, timedelta
 
 import yaml
 
+# Fixed columns for matrix-style website pages (crawlground / ssti).
+# Always emit every column so never-passing tools/rules still show as Fail.
+CRAWLGROUND_COLUMNS = ['standard', 'ajax', 'client']
+SSTI_COLUMNS = [
+    'rule_40012', 'rule_40026', 'rule_90025',
+    'rule_90019', 'rule_90035', 'rule_90036',
+]
+
 
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__,
@@ -197,6 +205,111 @@ def build_section_yaml(sec_info, curr_firing, prev_firing, path_order,
     }, regressions
 
 
+def _column_rate(firing_for_path, column, window):
+    """Pass rate for one matrix column over the window. Missing → 0."""
+    if not window:
+        return 0.0
+    return len(firing_for_path.get(column, set())) / window
+
+
+def _apply_column_score(row, column, curr_rate, prev_rate, path, regressions):
+    """Set column score (+ optional trend) on row; record down trends."""
+    score = fmt_score(curr_rate)
+    row[column] = score
+    trend, prev_score = get_trend(curr_rate, prev_rate)
+    if trend:
+        row[f'{column}_trend'] = trend
+        row[f'{column}_prev'] = prev_score
+        if trend == 'down':
+            regressions.append({
+                'path': path, 'rule': column,
+                'prev': prev_score, 'score': score,
+            })
+
+
+def build_matrix_section_yaml(scan, sec_info, curr_firing, prev_firing,
+                              path_order, curr_window, prev_window):
+    """
+    Build matrix-style YAML for crawlground or ssti.
+
+    One row per path/title with a score (and optional trend) per fixed column.
+    """
+    if scan == 'crawlground':
+        columns = CRAWLGROUND_COLUMNS
+    elif scan == 'ssti':
+        columns = SSTI_COLUMNS
+    else:
+        raise ValueError(f'Unknown matrix scan: {scan}')
+
+    details = []
+    regressions = []
+    n_paths = len(path_order)
+    col_full_passes = {c: 0 for c in columns}
+    any_full_passes = 0
+
+    for path in path_order:
+        curr_path = curr_firing.get(path, {})
+        prev_path = prev_firing.get(path, {}) if prev_firing is not None else {}
+
+        if scan == 'crawlground':
+            row = {'path': path, 'scheme': 'http'}
+        else:
+            row = {'title': path}
+
+        any_curr_days = set()
+        any_prev_days = set()
+
+        for column in columns:
+            curr_rate = _column_rate(curr_path, column, curr_window)
+            prev_rate = None
+            if prev_firing is not None and prev_window:
+                prev_rate = _column_rate(prev_path, column, prev_window)
+            _apply_column_score(row, column, curr_rate, prev_rate, path, regressions)
+            if curr_rate == 1.0:
+                col_full_passes[column] += 1
+            any_curr_days |= curr_path.get(column, set())
+            any_prev_days |= prev_path.get(column, set())
+
+        if scan == 'ssti':
+            any_curr = len(any_curr_days) / curr_window if curr_window else 0.0
+            any_prev = None
+            if prev_firing is not None and prev_window:
+                any_prev = len(any_prev_days) / prev_window
+            _apply_column_score(row, 'any', any_curr, any_prev, path, regressions)
+            if any_curr == 1.0:
+                any_full_passes += 1
+
+        details.append(row)
+
+    if scan == 'crawlground':
+        # Overall score matches existing snapshot semantics (client spider).
+        passes = col_full_passes['client']
+        fails = n_paths - passes
+        result = {
+            'section': sec_info['name'],
+            'target': sec_info['url'],
+            'details': details,
+            'tests': n_paths,
+            'passes': passes,
+            'standardPasses': col_full_passes['standard'],
+            'ajaxPasses': col_full_passes['ajax'],
+            'clientPasses': col_full_passes['client'],
+            'fails': fails,
+            'score': fmt_pct(passes / n_paths if n_paths else 0),
+        }
+    else:
+        result = {
+            'section': sec_info['name'],
+            'details': details,
+            'score': fmt_pct(any_full_passes / n_paths if n_paths else 0),
+        }
+        for column in columns:
+            result[f'{column}_score'] = col_full_passes[column]
+        result['any_score'] = any_full_passes
+
+    return result, regressions
+
+
 def post_slack_alert(scan, all_regressions, webhook_url):
     total = sum(len(r) for _, r in all_regressions)
     n_sections = len(all_regressions)
@@ -219,6 +332,7 @@ def post_slack_alert(scan, all_regressions, webhook_url):
 def main():
     args = parse_args()
     compare_days = args.compare_days if args.compare_days is not None else args.days
+    scan = args.scan or os.path.basename(os.path.normpath(args.data_dir))
 
     # Current window ends yesterday by default; previous window sits immediately before it
     curr_end = date.fromisoformat(args.end_date) if args.end_date else date.today() - timedelta(days=1)
@@ -246,14 +360,25 @@ def main():
     all_regressions = []
     for key, sec_info in sections.items():
         prev_firing = prev_firing_by_section.get(key) if prev_firing_by_section else None
-        data, regressions = build_section_yaml(
-            sec_info,
-            curr_firing[key],
-            prev_firing,
-            list(path_order[key].keys()),
-            curr_window,
-            prev_window,
-        )
+        if scan in ('crawlground', 'ssti'):
+            data, regressions = build_matrix_section_yaml(
+                scan,
+                sec_info,
+                curr_firing[key],
+                prev_firing,
+                list(path_order[key].keys()),
+                curr_window,
+                prev_window,
+            )
+        else:
+            data, regressions = build_section_yaml(
+                sec_info,
+                curr_firing[key],
+                prev_firing,
+                list(path_order[key].keys()),
+                curr_window,
+                prev_window,
+            )
         if regressions:
             all_regressions.append((sec_info['name'], regressions))
         out_path = os.path.join(args.output_dir, f'{key}.yml')
@@ -262,7 +387,6 @@ def main():
         print(f'  Written {out_path}')
 
     if all_regressions:
-        scan = args.scan or os.path.basename(os.path.normpath(args.data_dir))
         total = sum(len(r) for _, r in all_regressions)
         print(f'  {total} regression(s) detected across {len(all_regressions)} section(s)')
         if args.slack_webhook:

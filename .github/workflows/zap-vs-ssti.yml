@@ -9,17 +9,12 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-    - name: Clone zap-mgmt-scripts and zaproxy-website
+    - name: Clone zap-mgmt-scripts
       run: |
-        # Setup git details
         export GITHUB_USER=zapbot
         git config --global user.email "12745184+zapbot@users.noreply.github.com"
         git config --global user.name $GITHUB_USER
         git clone https://github.com/$GITHUB_USER/zap-mgmt-scripts.git
-
-        git clone -o upstream https://github.com/zaproxy/zaproxy-website.git
-        cd zaproxy-website
-        git remote add origin https://$GITHUB_USER:${{ secrets.ZAPBOT_TOKEN }}@github.com/$GITHUB_USER/zaproxy-website.git
 
     - name: Start V2SSTI
       run: |
@@ -40,8 +35,6 @@ jobs:
         chmod +x ssti.sh
         
         docker run -v $(pwd):/zap/wrk/:rw --network="host" ghcr.io/zaproxy/zaproxy:nightly /zap/wrk/ssti.sh
-        
-        cp $file ../../../zaproxy-website/site/data/scans/ssti/
 
     - name: Upload results to S3
       continue-on-error: true
@@ -73,25 +66,6 @@ jobs:
           --compare-days 7 \
           --scan ssti \
           --slack-webhook "$SLACK_WEBHOOK_URL"
-
-    - name: Raise a PR on the website
-      run: |
-        cd zaproxy-website
-
-        BRANCH="ssti"
-        git checkout -b $BRANCH
-
-        # Update the index to be sure git is aware of changes
-        git update-index -q --refresh
-        ## If there are changes: comment, commit, PR
-        if ! git diff-index --quiet HEAD --; then
-          echo ${{ secrets.ZAPBOT_TOKEN }} | gh auth login --with-token
-          gh repo set-default zaproxy/zaproxy-website
-          git add site/data/scans/ssti/*
-          git commit -sm "Updated Vuln to SSTI Results"
-          git push -u origin $BRANCH -f
-          gh pr create --fill || true
-        fi
 
     - name: Notify Slack on scan failure
       if: failure()
