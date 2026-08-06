@@ -58,6 +58,7 @@ jobs:
         # Just sync the subdirectories we need
         aws s3 sync s3://ssp-project-zap/stats/bitly/ project-zap/stats/bitly/
         aws s3 sync s3://ssp-project-zap/stats/cfu/ project-zap/stats/cfu/
+        aws s3 sync s3://ssp-project-zap/stats/news/ project-zap/stats/news/
         aws s3 sync s3://ssp-project-zap/stats/docker/ project-zap/stats/docker/
         aws s3 sync s3://ssp-project-zap/stats/downloads/ project-zap/stats/downloads/
         aws s3 sync s3://ssp-project-zap/stats/ghcr/ project-zap/stats/ghcr/
